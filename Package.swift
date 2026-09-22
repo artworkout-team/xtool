@@ -111,6 +111,8 @@ let package = Package(
         .target(
             name: "XUtils",
             dependencies: [
+                "CXKit",
+                .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "SystemPackage", package: "swift-system"),
                 .product(
                     name: "Subprocess",
@@ -165,9 +167,21 @@ let package = Package(
             dependencies: [
                 "XKit",
                 "XToolSupport",
+                "XCLIUtils",
                 "PackLib",
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "X509", package: "swift-certificates"),
+            ],
+            swiftSettings: swiftSettings,
+        ),
+        .target(
+            name: "XCLIUtils",
+            dependencies: [
+                "XUtils",
+                .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "ConcurrencyExtras", package: "swift-concurrency-extras"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings,
         ),
@@ -176,10 +190,11 @@ let package = Package(
             dependencies: [
                 "SwiftyMobileDevice",
                 "XKit",
+                "XCLIUtils",
                 "PackLib",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "SystemPackage", package: "swift-system"),
-                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "libunxip", package: "unxip"),
             ],
             cSettings: cSettings,

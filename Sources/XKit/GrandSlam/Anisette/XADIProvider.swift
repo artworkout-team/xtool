@@ -1,5 +1,6 @@
 #if canImport(XADI)
 
+import XUtils
 import Foundation
 import XADI
 import Dependencies
@@ -23,15 +24,13 @@ public actor XADIProvider: RawADIProvider {
 
             let applemusic = tmp.appending(path: "applemusic.apk")
             if !applemusic.exists {
-                print("[Downloading libraries] ...", terminator: "")
-                fflush(stdoutSafe)
+                d.out.print("[Downloading libraries] ...", terminator: "", flush: true)
                 let url = URL(string: "https://apps.mzstatic.com/content/android-apple-music-apk/applemusic.apk")!
-                defer { print("") }
+                defer { d.out.print("") }
                 let data = try await httpClient.makeRequest(HTTPRequest(url: url)) { progress in
                     guard let progress else { return }
                     let progString = "\(Int(progress * 100))%".padding(toLength: 4, leading: true)
-                    print("\r[Downloading libraries] \(progString)", terminator: "")
-                    fflush(stdoutSafe)
+                    d.out.print("\r[Downloading libraries] \(progString)", terminator: "", flush: true)
                 }.body
                 try data.write(to: applemusic)
             }
