@@ -32,9 +32,15 @@ private func product(_ type: Plan.ProductType) -> Plan.Product {
     // and the dead-strip would drop the whole extension unless it is forced to stay.
     #expect(flags.contains(["-Xlinker", "-u", "-Xlinker", "_main"]))
     // ...and the generated Package.swift snippet actually carries the quoted pair.
-    #expect(product(.appExtension).linkerSettings.contains(#""-u", "-Xlinker", "_main""#))
+    #expect(product(.appExtension).linkerSettings(compilerRT: nil).contains(#""-u", "-Xlinker", "_main""#))
 }
 
 @Test func applicationDoesNotForceMainSymbol() {
     #expect(!product(.application).linkerFlags.contains("-u"))
+}
+
+@Test func compilerRTLibraryNameFollowsBuildTriple() {
+    #expect(Packer.compilerRTLibraryName(for: "arm64-apple-ios") == "libclang_rt.ios.a")
+    #expect(Packer.compilerRTLibraryName(for: "arm64-apple-ios17.0-simulator") == "libclang_rt.iossim.a")
+    #expect(Packer.compilerRTLibraryName(for: "arm64-apple-macosx") == "libclang_rt.osx.a")
 }
