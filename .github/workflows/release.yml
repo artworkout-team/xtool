@@ -1,7 +1,8 @@
 on:
   push:
     tags:
-      - "*"
+      # artworkout-* tags release through artworkout-release.yml.
+      - "[0-9]*"
 
 env:
   XTL_CI: "1"
