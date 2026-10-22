@@ -15,7 +15,11 @@ public struct Packer: Sendable {
         let xtoolDir = URL(fileURLWithPath: "xtool")
         let compilerRT = Self.compilerRTLibrary(for: buildSettings.triple)
         let packageDir = xtoolDir.appendingPathComponent(".xtool-tmp")
-        try? FileManager.default.removeItem(at: packageDir)
+        let sourcesDir = packageDir.appendingPathComponent("Sources", isDirectory: true)
+        // Keep unchanged files instead of recreating the package: new modification dates make SwiftPM
+        // re-evaluate the manifest and make the build rescan the stubs, relink and re-sign every product.
+        try Self.removeEntries(of: packageDir, except: ["Package.swift", "Sources"])
+        try Self.removeEntries(of: sourcesDir, except: Set(plan.allProducts.map(\.targetName)))
         try FileManager.default.createDirectory(at: packageDir, withIntermediateDirectories: true)
 
         let packageSwift = packageDir.appendingPathComponent("Package.swift")
@@ -48,12 +52,13 @@ public struct Packer: Sendable {
             ]
         )\n
         """
-        try Data(contents.utf8).write(to: packageSwift)
+        try Self.write(Data(contents.utf8), to: packageSwift)
 
         for product in plan.allProducts {
-            let sources: URL = packageDir.appendingPathComponent("Sources/\(product.targetName)", isDirectory: true)
+            let sources: URL = sourcesDir.appendingPathComponent(product.targetName, isDirectory: true)
+            try Self.removeEntries(of: sources, except: ["stub.c"])
             try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
-            try Data().write(to: sources.appendingPathComponent("stub.c", isDirectory: false))
+            try Self.write(Data(), to: sources.appendingPathComponent("stub.c", isDirectory: false))
         }
 
         let buildConfig = try await buildSettings
@@ -209,6 +214,20 @@ public struct Packer: Sendable {
                 options: 0
             )
             try encodedPlist.write(to: infoPath)
+        }
+    }
+
+    /// Writes `data` unless the file already holds it, so that its modification date stays put.
+    private static func write(_ data: Data, to url: URL) throws {
+        if let existing = try? Data(contentsOf: url), existing == data { return }
+        try data.write(to: url)
+    }
+
+    /// Removes the entries of `directory` whose names are not in `kept`. A missing directory has none.
+    private static func removeEntries(of directory: URL, except kept: Set<String>) throws {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in names where !kept.contains(name) {
+            try FileManager.default.removeItem(at: directory.appendingPathComponent(name))
         }
     }
 
