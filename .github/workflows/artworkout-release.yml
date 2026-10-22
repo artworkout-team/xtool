@@ -1,0 +1,82 @@
+# Publishes the tools that ArtWorkout's Linux build hosts download: the xtool AppImages and a macOS
+# xtool binary for building the Darwin SDK on a developer's Mac. Push a tag named
+# artworkout-<short commit hash> to the artworkout/linux-builds commit to release.
+name: ArtWorkout release
+
+on:
+  push:
+    tags:
+      - "artworkout-*"
+
+env:
+  XTL_CI: "1"
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        host:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.host.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Build
+        run: |
+          docker compose run --build \
+            -e XTOOL_VERSION=${{ github.ref_name }} \
+            -e XTL_CI=1 \
+            --rm xtool Linux/build.sh
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: xtool-${{ matrix.host.arch }}
+          path: Linux/packages/xtool-${{ matrix.host.arch }}.AppImage
+
+  build-macos:
+    runs-on: xcode-27
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/configure-xcode
+      - name: Build
+        run: |
+          swift build -c release --product xtool
+          bin="$(swift build -c release --show-bin-path)"
+          mkdir -p package
+          cp "$bin/xtool" package/
+          find "$bin" -maxdepth 1 -name '*.bundle' -exec cp -R {} package/ \;
+          package/xtool --help >/dev/null
+          tar -C package -czf xtool-macos-arm64.tar.gz .
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: xtool-macos
+          path: xtool-macos-arm64.tar.gz
+
+  release:
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: xtool-*
+          path: output
+          merge-multiple: true
+      - name: Publish release
+        run: |
+          cd output
+          sha256sum * > SHA256SUMS
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" \
+            --prerelease --title "${{ github.ref_name }}" --target "${{ github.sha }}" \
+            --notes "xtool from ${{ github.sha }} for ArtWorkout's Linux build hosts." \
+            *
