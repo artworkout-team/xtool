@@ -49,7 +49,9 @@ jobs:
           bin="$(swift build -c release --show-bin-path)"
           mkdir -p package
           cp "$bin/xtool" package/
-          find "$bin" -maxdepth 1 -name '*.bundle' -exec cp -R {} package/ \;
+          # xtool loads its libraries and frameworks from its own directory (@loader_path).
+          find "$bin" -maxdepth 1 \( -name '*.bundle' -o -name '*.dylib' -o -name '*.framework' \) \
+            -exec cp -R {} package/ \;
           package/xtool --help >/dev/null
           tar -C package -czf xtool-macos-arm64.tar.gz .
       - name: Upload artifact
