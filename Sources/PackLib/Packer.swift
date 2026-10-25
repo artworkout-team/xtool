@@ -285,30 +285,55 @@ public struct Packer: Sendable {
 }
 
 extension Plan.Product {
-    fileprivate func linkerSettings(compilerRT: String?) -> String {
-        let compilerRTFlags = compilerRT.map { "\"-Xlinker\", \"\($0)\"," } ?? ""
+    /// The `-Xlinker` and friends passed through `unsafeFlags` for this product.
+    var linkerFlags: [String] {
+        switch self.type {
+        case .application: [
+            "-Xlinker", "-rpath", "-Xlinker", "@executable_path/Frameworks",
+        ]
+        case .appExtension:
+            // Set the entry point to Foundation`_NSExtensionMain
+            ["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"]
+            // Keep `main`: nothing references it when the entry point is
+            // _NSExtensionMain, so the dead-strip would drop the whole extension.
+            // Skipped when the extension declares a principal class or a main
+            // storyboard: the runtime instantiates it and `main` may not exist.
+            // Otherwise (WidgetKit-style `@main`) it must come from the extension's
+            // own library, as the builder's stub.c is empty. See Appex.md.
+            + (needsMainSymbol ? ["-Xlinker", "-u", "-Xlinker", "_main"] : [])
+            // Include frameworks that the host app may use
+            + ["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../../Frameworks"]
+            // ...as well as our own
+            + ["-Xlinker", "-rpath", "-Xlinker", "@executable_path/Frameworks"]
+        }
+    }
+
+    /// Whether the extension relies on its own `main` symbol. An extension that names a
+    /// principal class or a main storyboard is instantiated through the ObjC runtime.
+    var needsMainSymbol: Bool {
+        guard let nsExtension = infoPlist["NSExtension"] as? [String: any Sendable] else {
+            return true
+        }
+        return nsExtension["NSExtensionPrincipalClass"] == nil
+            && nsExtension["NSExtensionMainStoryboard"] == nil
+    }
+
+    /// `linkerFlags` as the generated `Package.swift` text, followed by the compiler-rt archive
+    /// that `@available` checks in Objective-C need.
+    func linkerSettings(compilerRT: String?) -> String {
+        let flags = (linkerFlags + (compilerRT.map { ["-Xlinker", $0] } ?? []))
+            .map { "\"\($0)\"" }.joined(separator: ", ")
         switch self.type {
         case .application: return """
         [
-            .unsafeFlags([
-                "-Xlinker", "-rpath", "-Xlinker", "@executable_path/Frameworks",
-                \(compilerRTFlags)
-            ]),
+            .unsafeFlags([\(flags)]),
         ]
         """
         case .appExtension: return """
         [
             // Link to Foundation framework which implements the _NSExtensionMain entrypoint
             .linkedFramework("Foundation"),
-            .unsafeFlags([
-                // Set the entry point to Foundation`_NSExtensionMain
-                "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain",
-                // Include frameworks that the host app may use
-                "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../../Frameworks",
-                // ...as well as our own
-                "-Xlinker", "-rpath", "-Xlinker", "@executable_path/Frameworks",
-                \(compilerRTFlags)
-            ]),
+            .unsafeFlags([\(flags)]),
         ]
         """
         }
