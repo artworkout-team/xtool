@@ -68,3 +68,8 @@ private func product(
     #expect(Packer.compilerRTLibraryName(for: "arm64-apple-ios17.0-simulator") == "libclang_rt.iossim.a")
     #expect(Packer.compilerRTLibraryName(for: "arm64-apple-macosx") == "libclang_rt.osx.a")
 }
+
+@Test func linkerSettingsAppendCompilerRTAfterProductFlags() {
+    let settings = product(.appExtension).linkerSettings(compilerRT: "/sdk/libclang_rt.ios.a")
+    #expect(settings.contains(#""@executable_path/Frameworks", "-Xlinker", "/sdk/libclang_rt.ios.a""#))
+}
